@@ -1,0 +1,6 @@
+cc_library(
+    name = "signal_tree",
+    srcs = ["signal_tree.cc"],
+    hdrs = ["signal_tree.h"],
+    visibility = ["//visibility:public"]
+)

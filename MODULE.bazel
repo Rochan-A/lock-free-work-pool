@@ -1,3 +1,5 @@
+module(name="signal_tree")
+
 # https://registry.bazel.build/modules/googletest
 bazel_dep(name = "googletest", version = "1.15.2")
 

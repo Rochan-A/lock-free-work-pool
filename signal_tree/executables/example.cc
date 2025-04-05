@@ -5,9 +5,8 @@
 
 #include "signal_tree/signal_tree.h"
 
-// A small example usage
 int main() {
-  // Create a SignalTree with 8 leaves (we will store 1 in each leaf).
+  // Create a SignalTree with 8 leaves.
   SignalTree tree(8);
 
   // Acquire a leaf (in single-threaded example).

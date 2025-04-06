@@ -1,111 +1,92 @@
-#include "signal_tree/signal_tree.h"
 #include <atomic>
-#include <cstddef>
-#include <iostream>
+#include <cassert>
+#include <cmath>
+#include <memory>
 #include <vector>
 
-SignalTree::SignalTree(std::size_t num_leaves) {
-  // Round up num_leaves to the next power of two for convenience.
-  // (If you already have a multiple of two, you can remove this step.)
-  num_leaves_ = 1;
-  while (num_leaves_ < num_leaves) {
-    num_leaves_ <<= 1; // power of two
-  }
+#include "signal_tree/signal_tree.h"
 
-  // The tree is a binary tree stored in an array.
-  // Number of internal nodes is num_leaves_ - 1.
-  // So total size is (num_leaves_ - 1) + num_leaves_ = 2 * num_leaves_ - 1.
-  std::size_t total_size = 2 * num_leaves_ - 1;
-  tree_.resize(total_size + 1); // +1 so we can use 1-based indexing.
+namespace signal_tree {
 
-  // Leaves start at offset_ = num_leaves_.
-  offset_ = num_leaves_;
+SignalTree::SignalTree(const size_t capacity) : capacity_(capacity) {
+  assert(capacity > 0 && ((capacity & (capacity - 1)) == 0));
+
+  tree_.resize(capacity);
 
   // Initialize all leaves to 1 (meaning "free").
-  for (std::size_t i = offset_; i < offset_ + num_leaves_; ++i) {
-    tree_[i].store(1, std::memory_order_relaxed);
+  for (size_t i = capacity; i < 2 * capacity; ++i) {
+    tree_.emplace_back(1);
   }
 
-  // Build sums in the internal nodes (indices [1..offset_-1]).
-  for (std::size_t i = offset_ - 1; i >= 1; --i) {
-    tree_[i].store(tree_[2 * i].load(std::memory_order_relaxed) +
-                       tree_[2 * i + 1].load(std::memory_order_relaxed),
-                   std::memory_order_relaxed);
+  // Build sums in the internal nodes by summing children.
+  for (size_t i = capacity - 1; i > 0; --i) {
+    int left = tree_.at(2 * i).load(std::memory_order_relaxed);
+    int right = tree_.at(2 * i + 1).load(std::memory_order_relaxed);
+    tree_.at(i).store(left + right, std::memory_order_relaxed);
   }
+
+  // Node 0 is unused, so we ignore it here.
 }
 
-int SignalTree::Acquire() {
-  while (true) {
-    // Check root; if it's zero, then no leaves are free.
-    int root_val = tree_[1].load(std::memory_order_acquire);
-    if (root_val == 0) {
-      // No available leaves
-      return -1;
-    }
-
-    // We do a top-down traversal to find a free leaf (value=1).
-    std::size_t idx = 1; // start at root
-    while (idx < offset_) {
-      // Descend to left or right child depending on which has a positive sum.
-      // We'll read the left child's sum; if it is > 0, we go left,
-      // else we go right.
-      int left_val = tree_[2 * idx].load(std::memory_order_acquire);
-      if (left_val > 0) {
-        idx = 2 * idx;
-      } else {
-        idx = 2 * idx + 1;
-      }
-    }
-
-    // Now idx is at a leaf. Try to set it from 1 -> 0.
-    int expected = 1;
-    if (tree_[idx].compare_exchange_strong(expected, 0,
-                                           std::memory_order_acq_rel,
-                                           std::memory_order_relaxed)) {
-      // Succeeded in reserving this leaf. We must now propagate the
-      // decrement up the tree. We'll do a loop up to the root. The
-      // difference is 1 (we changed from 1 to 0).
-      std::size_t parent = idx / 2;
-      std::size_t child = idx;
-      while (parent >= 1) {
-        tree_[parent].fetch_sub(1, std::memory_order_acq_rel);
-        child = parent;
-        parent /= 2;
-      }
-
-      // Return the leaf index for later Release calls.
-      return static_cast<int>(idx - offset_);
-    }
-    // If the CAS failed, that means another thread took the leaf at the
-    // same time. We retry from the root.
+const int SignalTree::Acquire() {
+  // Decrement the root’s sum to see if a free slot is available. If the old
+  // root value was < 0, there is no free leaf.
+  std::atomic<int> &root = tree_.at(1);
+  if (root.fetch_sub(1, std::memory_order_acquire) < 0) {
+    // We decremented below zero; revert it and fail.
+    root.fetch_add(1, std::memory_order_release);
+    return -1;
   }
+
+  // Find a free leaf by traversing top-down, using *loads* only. We rely on the
+  // fact that we already decremented the root, so at least one leaf should
+  // still be free.
+  size_t idx = 1;
+  while (idx < capacity_) {
+    // Examine the left child's sum:
+    std::atomic<int> &node = tree_.at(2 * idx);
+    if (node.load(std::memory_order_relaxed) > 0) {
+      // Go left if it still has a free leaf.
+      idx = 2 * idx;
+    } else {
+      // Otherwise go right.
+      idx = 2 * idx + 1;
+    }
+  }
+  // At this point, idx is a leaf [kCapacity..2*kCapacity-1].
+
+  // Try to mark this leaf as acquired: 1 -> 0.
+  int expected = 1;
+  if (!tree_.at(idx).compare_exchange_strong(
+          expected, 0, std::memory_order_acq_rel, std::memory_order_relaxed)) {
+    // Unexpected?
+    throw std::runtime_error("Expected leaf to have 1, failed to acquire!");
+  }
+
+  // Success! idx - kCapacity is the “leaf index” in [0..kCapacity-1].
+  return static_cast<int>(idx - capacity_);
 }
 
-void SignalTree::Release(int leaf_index) {
-  if (leaf_index < 0) {
-    return;
+void SignalTree::Release(const int &index) {
+  if (index < 0 || static_cast<size_t>(index) >= capacity_) {
+    throw std::runtime_error("Release() called with invalid index!");
   }
 
-  std::size_t idx = offset_ + static_cast<std::size_t>(leaf_index);
-  // Attempt to set from 0 -> 1. In a correct usage scenario, the
-  // leaf should be 0 if it has been acquired.
+  // Mark leaf as free: 0 -> 1
+  size_t leafIndex = capacity_ + static_cast<size_t>(index);
   int expected = 0;
-  if (!tree_[idx].compare_exchange_strong(
+  if (!tree_.at(leafIndex).compare_exchange_strong(
           expected, 1, std::memory_order_acq_rel, std::memory_order_relaxed)) {
-    // This would be an error in correct usage,
-    // but we do not attempt to handle it here.
-    return;
+    // Leaf wasn’t acquired in the first place, or a race occurred.
+    throw std::runtime_error("Releasing a leaf that was not acquired!");
   }
 
-  // Propagate the increment (+1) up to the root.
-  std::size_t parent = idx / 2;
+  // Propagate +1 up the tree to the root.
+  size_t parent = leafIndex / 2;
   while (parent >= 1) {
-    tree_[parent].fetch_add(1, std::memory_order_acq_rel);
+    tree_.at(parent).fetch_add(1, std::memory_order_acq_rel);
     parent /= 2;
   }
 }
 
-int SignalTree::FreeCount() const {
-  // Root holds sum of all leaves
-  return tree_[1].load(std::memory_order_acquire);
-}
+} // namespace signal_tree

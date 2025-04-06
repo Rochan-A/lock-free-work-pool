@@ -1,41 +1,48 @@
+#pragma once
+
 #include <atomic>
-#include <cstddef>
-#include <iostream>
+#include <deque>
 #include <memory>
-#include <vector>
 
 namespace signal_tree {
 
-template <typename T, size_t kCapacity> class SignalTree {
+class SignalTree {
 public:
-  explicit SignalTree();
+  explicit SignalTree(const size_t capacity);
 
-  ~SignalTree() {}
+  ~SignalTree() = default;
 
-  // Acquire returns the index of a leaf that was successfully reserved (set
-  // from 1 -> 0). If none are free, returns -1.
-  std::shared_ptr<T> Acquire();
+  // Acquire a free leaf (if any). Returns -1 if none is free.
+  const int Acquire();
 
-  // Release sets the leaf at "leaf_index" (as returned from Acquire) back to 1
-  // and updates all ancestor nodes.
-  void Release(std::shared_ptr<T> &item);
+  // Release a leaf back to free state.
+  void Release(const int &index);
 
-  // Returns true if the tree has free elements. Not race-free.
-  const bool IsFree() const { return tree_[0]; };
+  // True if there is at least one free leaf in the tree.
+  const bool IsFree() const {
+    return tree_[1].load(std::memory_order_acquire) > 0;
+  }
 
-  // Number of objects in the signal tree (i.e., number of leaves).
-  const size_t Capacity() const { return kCapacity; }
+  // Returns the number of free leaves in the tree.
+  const int FreeCount() const {
+    return tree_[1].load(std::memory_order_acquire);
+  }
+
+  // Number of leaves (capacity).
+  const size_t Capacity() const { return capacity_; }
+
+  // Non-copyable, non-assignable
+  SignalTree(const SignalTree &) = delete;
+  SignalTree &operator=(const SignalTree &) = delete;
 
 private:
-  // tree_ is 1-based indexing for convenience in a segment-tree style.
-  // tree_[1] is the root.
-  std::vector<std::atomic<int>> tree_;
+  const size_t capacity_{0};
 
-  // Container that stores objects associated with leaves.
-  std::array<T, kCapacity> objects_;
-
-  // index in tree_ where leaves begin
-  std::size_t offset_;
+  // We store 2*kCapacity nodes in a segment-tree layout:
+  //    - Internal nodes [1..kCapacity-1] store sums of children.
+  //    - Leaves [kCapacity..2*kCapacity-1] store 1 (free) or 0 (acquired).
+  // Index 0 is unused, so that node i has children (2*i) and (2*i + 1).
+  std::deque<std::atomic<int>> tree_;
 };
 
 } // namespace signal_tree

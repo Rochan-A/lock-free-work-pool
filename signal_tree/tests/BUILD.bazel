@@ -4,7 +4,7 @@ cc_test(
     deps = [
         "@googletest//:gtest",
         "@googletest//:gtest_main",
-        "@//signal_tree:signal_tree",
+        "//signal_tree:signal_tree",
     ],
     visibility = ["//visibility:public"]
 )

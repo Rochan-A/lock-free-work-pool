@@ -1,17 +1,8 @@
 cc_binary(
-    name = "example",
-    srcs = ["example.cc"],
-    deps = [
-        "@//signal_tree:signal_tree",
-    ],
-    visibility = ["//visibility:public"]
-)
-
-cc_binary(
     name = "benchmark_signal_tree",
     srcs = ["benchmark_signal_tree.cc"],
     deps = [
-        "@//signal_tree:signal_tree",
+        "//signal_tree:signal_tree",
     ],
     visibility = ["//visibility:public"]
 )

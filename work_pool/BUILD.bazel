@@ -1,0 +1,9 @@
+cc_library(
+    name = "work_pool",
+    srcs = ["work_pool.cc"],
+    hdrs = ["work_pool.h"],
+    deps = [
+        "//signal_tree:signal_tree"
+    ],
+    visibility = ["//visibility:public"]
+)

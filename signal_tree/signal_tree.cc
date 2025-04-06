@@ -70,6 +70,7 @@ const int SignalTree::Acquire() {
         for (size_t node : path) {
           tree_[node].fetch_add(1);
         }
+        // TODO: make this impossible.
         return -1;
       }
       idx = rightIdx;
@@ -87,6 +88,7 @@ const int SignalTree::Acquire() {
         for (auto node : path) {
           tree_[node].fetch_add(1, std::memory_order_release);
         }
+        // TODO: make this impossible.
         return -1;
       } else {
         idx = rightIdx;

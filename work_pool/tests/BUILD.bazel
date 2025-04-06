@@ -1,0 +1,10 @@
+cc_test(
+    name = "test_work_pool",
+    srcs = ["test_work_pool.cc"],
+    deps = [
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "//work_pool:work_pool",
+    ],
+    visibility = ["//visibility:public"]
+)

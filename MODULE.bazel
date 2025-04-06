@@ -1,4 +1,4 @@
-module(name="signal_tree")
+module(name="work_pool")
 
 # https://registry.bazel.build/modules/googletest
 bazel_dep(name = "googletest", version = "1.15.2")

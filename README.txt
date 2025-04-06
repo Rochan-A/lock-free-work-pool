@@ -1,16 +1,20 @@
+Lock-free Work Pool
+-------------------
+
+Implements the tree-like data structure and threaded work pool described in this CppCon Talk:
+https://youtu.be/oj-_vpZNMVw.
+
 Signal Tree
 -----------
 
-Implements the tree-like data structure described in this CppCon Talk: https://youtu.be/oj-_vpZNMVw.
-
-Signal tree is a lock-free data structure for quickly determining and updating the availability of
-resources. Conceptually, the tree has:
+Signal tree is a lock-free data structure for quickly scheduling resources to run on a pool of
+workers. Conceptually, the tree has:
 * a fixed number of leaves, each representing a single resource, each leaf contains an integer that
   is 1 if available, and 0 if used.
 * internal nodes store the sum of their children’s values, so the root’s value is the total number
   of free leaves in the entire tree.
 
-Signal tree exposes two key methods, Acquire() and Release().
+Signal tree exposes two key methods, Schedule() and Release().
 
 Acquire()
 ---------
@@ -32,15 +36,15 @@ Release()
 Why use this data-structure?
 ----------------------------
 
-* O(log n) complexity to find a free resource. This is the biggest benifit of using this over other
-  other data-structures when managing a pool of resources that are acquired and released randomly. 
-* Lock-free: All operations use atomic primitives, improving performance in highly concurrent environments.
-* Constant-time root checks: The root node gives an immediate sense of availability (0 means no free resources).
-* Bounded memory usage: The tree is of fixed size (no dynamic leaf growth).
+* O(log n) complexity to find a free resource.
+* All operations use atomic primitives, improving performance in highly concurrent environments.
+* Constant-time availability check (if root is 0, no free resources).
+* Bounded memory usage.
 
 
 Implementation Notes
 --------------------
 
-* The tree can be an n-ary tree (using binary atomic operations). Currently, I've only implemented
+* Signal tree can be an n-ary tree (using binary atomic operations). Currently, I've only implemented
   a binary tree.
+* TODO: Implement thread-backed work pool.

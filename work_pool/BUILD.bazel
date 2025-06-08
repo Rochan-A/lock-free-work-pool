@@ -1,9 +1,24 @@
 cc_library(
-    name = "work_pool",
-    srcs = ["work_pool.cc"],
-    hdrs = ["work_pool.h"],
+    name = "lock_free_mpmc",
+    hdrs = ["lock_free_mpmc.h"],
     deps = [
-        "//signal_tree:signal_tree"
+        ":task_store",
+        "@concurrent_queue//:blockingconcurrentqueue",
     ],
+    visibility = ["//visibility:public"]
+)
+
+cc_library(
+    name = "thread_pool",
+    hdrs = ["thread_pool.h"],
+    deps = [
+        ":task_store"
+    ],
+    visibility = ["//visibility:public"]
+)
+
+cc_library(
+    name = "task_store",
+    hdrs = ["task_store.h"],
     visibility = ["//visibility:public"]
 )

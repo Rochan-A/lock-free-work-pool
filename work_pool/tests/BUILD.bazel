@@ -4,7 +4,6 @@ cc_test(
     deps = [
         "@googletest//:gtest",
         "@googletest//:gtest_main",
-        "//work_pool:work_pool",
     ],
     visibility = ["//visibility:public"]
 )

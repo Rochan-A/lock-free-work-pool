@@ -1,8 +1,21 @@
 cc_binary(
-    name = "benchmark_work_pool",
-    srcs = ["benchmark_work_pool.cc"],
+    name = "benchmark_mpmc_work_pool",
+    srcs = ["benchmark_mpmc_work_pool.cc"],
     deps = [
-        "//work_pool:work_pool",
+        "//work_pool:lock_free_mpmc",
+        "//work_pool:thread_pool",
+        "@concurrent_queue//:concurrentqueue",
+        "@google_benchmark//:benchmark",
+    ],
+    visibility = ["//visibility:public"]
+)
+
+cc_binary(
+    name = "dummy_mpmc_work_pool",
+    srcs = ["dummy_mpmc_work_pool.cc"],
+    deps = [
+        "//work_pool:lock_free_mpmc",
+        "//work_pool:thread_pool",
     ],
     visibility = ["//visibility:public"]
 )
